@@ -7,9 +7,18 @@ interface AnalysisResult {
   score: number;
   requirements: {
     met: string[];
-    notMet: string[];
+    unmet: string[];
   };
   reasoning: string;
+  nextSteps: string[];
+}
+
+interface ProposalData {
+  coverLetter: string;
+  executiveSummary: string;
+  technicalApproach: string;
+  pricing: string;
+  whyChooseUs: string;
 }
 
 export default function Home() {
@@ -17,6 +26,8 @@ export default function Home() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState('');
+  const [proposalData, setProposalData] = useState<ProposalData | null>(null);
+  const [isGeneratingProposal, setIsGeneratingProposal] = useState(false);
 
   const sampleRfp = `REQUEST FOR PROPOSAL
 Federal Infrastructure Modernization Project
@@ -53,6 +64,7 @@ SUBMISSION DEADLINE: 30 days from publication`;
     setIsAnalyzing(true);
     setError('');
     setResult(null);
+    setProposalData(null);
 
     try {
       const response = await fetch('/api/analyze', {
@@ -80,6 +92,95 @@ SUBMISSION DEADLINE: 30 days from publication`;
     setRfpText(sampleRfp);
     setResult(null);
     setError('');
+    setProposalData(null);
+  };
+
+  const generateProposal = async () => {
+    if (!result || result.decision !== 'GO') return;
+
+    setIsGeneratingProposal(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/generate-proposal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ rfpText, analysisResult: result }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Proposal generation failed');
+      }
+
+      const data = await response.json();
+      setProposalData(data);
+    } catch (err) {
+      setError('An error occurred during proposal generation. Please try again.');
+    } finally {
+      setIsGeneratingProposal(false);
+    }
+  };
+
+  const copyProposal = async () => {
+    if (!proposalData) return;
+
+    const proposalText = `PROPOSAL
+
+COVER LETTER
+${proposalData.coverLetter}
+
+EXECUTIVE SUMMARY
+${proposalData.executiveSummary}
+
+TECHNICAL APPROACH
+${proposalData.technicalApproach}
+
+PRICING
+${proposalData.pricing}
+
+WHY CHOOSE US
+${proposalData.whyChooseUs}`;
+
+    try {
+      await navigator.clipboard.writeText(proposalText);
+      // Show success feedback (you could add a toast here)
+      alert('Proposal copied to clipboard!');
+    } catch (err) {
+      alert('Failed to copy proposal');
+    }
+  };
+
+  const downloadProposal = () => {
+    if (!proposalData) return;
+
+    const proposalText = `PROPOSAL
+
+COVER LETTER
+${proposalData.coverLetter}
+
+EXECUTIVE SUMMARY
+${proposalData.executiveSummary}
+
+TECHNICAL APPROACH
+${proposalData.technicalApproach}
+
+PRICING
+${proposalData.pricing}
+
+WHY CHOOSE US
+${proposalData.whyChooseUs}`;
+
+    const blob = new Blob([proposalText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'proposal.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -117,11 +218,7 @@ SUBMISSION DEADLINE: 30 days from publication`;
                 disabled={isAnalyzing || !rfpText.trim()}
                 className="flex-1 bg-[#10b981] text-white py-3 px-6 rounded-lg font-medium hover:bg-[#0ea471] disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200"
               >
-                {isAnalyzing ? (
-                  <span className="inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  'Analyze RFP'
-                )}
+                {isAnalyzing ? 'Analyzing...' : 'Analyze RFP'}
               </button>
               <button
                 onClick={loadSampleRfp}
@@ -176,11 +273,11 @@ SUBMISSION DEADLINE: 30 days from publication`;
                     </div>
                   )}
 
-                  {result.requirements.notMet.length > 0 && (
-                    <div>
-                      <p className="text-sm font-medium text-gray-700 mb-2">Unmet Requirements</p>
-                      <ul className="space-y-2">
-                        {result.requirements.notMet.map((req, index) => (
+                {result.requirements.unmet.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-2">Unmet Requirements</p>
+                    <ul className="space-y-2">
+                      {result.requirements.unmet.map((req, index) => (
                           <li key={index} className="flex items-start">
                             <span className="text-gray-400 mr-2">✗</span>
                             <span className="text-gray-700">{req}</span>
@@ -196,6 +293,34 @@ SUBMISSION DEADLINE: 30 days from publication`;
                   <h3 className="font-semibold mb-2">Analysis Summary</h3>
                   <p className="text-gray-700 leading-relaxed">{result.reasoning}</p>
                 </div>
+
+                {/* Next Steps */}
+                {result.nextSteps && result.nextSteps.length > 0 && (
+                  <div className="border-t border-gray-200 pt-6">
+                    <h3 className="font-semibold mb-2">Next Steps</h3>
+                    <ul className="space-y-2">
+                      {result.nextSteps.map((step, index) => (
+                        <li key={index} className="flex items-start">
+                          <span className="text-gray-400 mr-2">•</span>
+                          <span className="text-gray-700">{step}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Generate Proposal Button */}
+                {result.decision === 'GO' && (
+                  <div className="border-t border-gray-200 pt-6">
+                    <button
+                      onClick={generateProposal}
+                      disabled={isGeneratingProposal}
+                      className="w-full bg-[#10b981] text-white py-3 px-6 rounded-lg font-medium hover:bg-[#0ea471] disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200"
+                    >
+                      {isGeneratingProposal ? 'Generating...' : 'Generate Proposal'}
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="h-full flex items-center justify-center text-gray-400">
@@ -204,6 +329,63 @@ SUBMISSION DEADLINE: 30 days from publication`;
             )}
           </div>
         </div>
+
+        {/* Proposal Section */}
+        {proposalData && (
+          <div className="mt-8 space-y-6">
+            <div className="border-b border-gray-200 pb-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-semibold">Generated Proposal</h2>
+                <div className="flex gap-4">
+                  <button
+                    onClick={copyProposal}
+                    className="px-4 py-2 bg-white border border-gray-200 rounded-lg font-medium hover:bg-gray-50 transition-all duration-200"
+                  >
+                    Copy to Clipboard
+                  </button>
+                  <button
+                    onClick={downloadProposal}
+                    className="px-4 py-2 bg-[#10b981] text-white rounded-lg font-medium hover:bg-[#0ea471] transition-all duration-200"
+                  >
+                    Download Proposal
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6">
+              {/* Cover Letter */}
+              <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+                <h3 className="text-lg font-semibold mb-4">Cover Letter</h3>
+                <p className="text-gray-700 leading-relaxed whitespace-pre-line">{proposalData.coverLetter}</p>
+              </div>
+
+              {/* Executive Summary */}
+              <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+                <h3 className="text-lg font-semibold mb-4">Executive Summary</h3>
+                <p className="text-gray-700 leading-relaxed whitespace-pre-line">{proposalData.executiveSummary}</p>
+              </div>
+
+              {/* Technical Approach */}
+              <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+                <h3 className="text-lg font-semibold mb-4">Technical Approach</h3>
+                <p className="text-gray-700 leading-relaxed whitespace-pre-line">{proposalData.technicalApproach}</p>
+              </div>
+
+              {/* Pricing */}
+              <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+                <h3 className="text-lg font-semibold mb-4">Pricing</h3>
+                <p className="text-gray-700 leading-relaxed whitespace-pre-line">{proposalData.pricing}</p>
+              </div>
+
+              {/* Why Choose Us */}
+              <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+                <h3 className="text-lg font-semibold mb-4">Why Choose Us</h3>
+                <p className="text-gray-700 leading-relaxed whitespace-pre-line">{proposalData.whyChooseUs}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
