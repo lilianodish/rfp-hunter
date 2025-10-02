@@ -1,16 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useProfileStore } from '@/lib/stores/profileStore';
+import { ProfileCompleteness } from '@/components/profile/ProfileCompleteness';
+import { AnalysisResult } from '@/components/AnalysisResult';
 
-interface AnalysisResult {
-  decision: 'GO' | 'NO-GO';
+interface AnalysisResultData {
+  decision: 'HIGH_CONFIDENCE_GO' | 'MEDIUM_CONFIDENCE_GO' | 'LOW_CONFIDENCE_GO' | 'NO_GO';
   score: number;
+  breakdown: {
+    geographic: number;
+    insurance: number;
+    services: number;
+    certifications: number;
+  };
+  missingRequirements: string[];
+  fillableGaps: string[];
+  analysis: string;
+  proposal?: string;
   requirements: {
     met: string[];
     unmet: string[];
   };
-  reasoning: string;
-  nextSteps: string[];
 }
 
 interface ProposalData {
@@ -22,42 +34,79 @@ interface ProposalData {
 }
 
 export default function Home() {
+  const router = useRouter();
   const [rfpText, setRfpText] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [result, setResult] = useState<AnalysisResultData | null>(null);
   const [error, setError] = useState('');
   const [proposalData, setProposalData] = useState<ProposalData | null>(null);
   const [isGeneratingProposal, setIsGeneratingProposal] = useState(false);
+  const [showOnboardingPrompt, setShowOnboardingPrompt] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  const profile = useProfileStore(state => state.profile);
+  const getCompleteness = useProfileStore(state => state.getCompleteness);
+  const isHydrated = useProfileStore(state => state.isHydrated);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && isHydrated && (!profile?.basics?.companyName || getCompleteness().overall < 30)) {
+      setShowOnboardingPrompt(true);
+    }
+  }, [profile, getCompleteness, mounted, isHydrated]);
 
   const sampleRfp = `REQUEST FOR PROPOSAL
-Federal Infrastructure Modernization Project
+City of Glendale - Municipal Building Pressure Washing Services
 
 PROJECT OVERVIEW:
-The Department of Transportation seeks qualified vendors to modernize legacy infrastructure management systems. This includes migrating from on-premises solutions to cloud-based platforms, implementing real-time monitoring capabilities, and ensuring compliance with federal security standards.
+The City of Glendale seeks qualified contractors for comprehensive pressure washing services for multiple municipal buildings and parking structures. This contract includes quarterly cleaning of building exteriors, monthly parking garage maintenance, and on-call emergency cleaning services.
 
 SCOPE OF WORK:
-- System architecture design and implementation
-- Data migration from legacy databases
-- Integration with existing federal systems
-- Security compliance (FedRAMP, FISMA)
-- Training for government personnel
-- 24/7 support and maintenance
+- Pressure wash building exteriors (5 buildings, approx. 50,000 sq ft total)
+- Clean and maintain 3 parking structures (800 spaces total)
+- Remove graffiti within 24 hours of notification
+- Clean sidewalks and entryways weekly
+- Provide emergency cleaning services as needed
 
 REQUIREMENTS:
-- Minimum 10 years experience with government contracts
-- Active security clearance (Secret or above)
-- Demonstrated expertise in cloud migrations
-- ISO 27001 certification
-- Past performance on similar federal projects
+- Minimum $2 million general liability insurance
+- Workers compensation insurance required
+- Valid California contractor's license
+- EPA compliant cleaning practices
+- Minimum 3,500 PSI hot water equipment
+- Water recovery and filtration capabilities
+- Must be located within 25 miles of Glendale, CA 91203
 
-TIMELINE: 18 months from contract award
-BUDGET: $15-20 million
+OPERATIONAL REQUIREMENTS:
+- Available for night and weekend work
+- 24/7 emergency response within 4 hours
+- Minimum 5 years experience
+- At least 10 employees
+
+CERTIFICATIONS:
+- Business license in City of Glendale
+- OSHA 10-hour certification for all workers
+- EPA certification for water discharge
+
+CONTRACT DETAILS:
+- Duration: 3 years with two 1-year options
+- Estimated value: $500,000 - $750,000 annually
+- Payment terms: Net 30
 
 SUBMISSION DEADLINE: 30 days from publication`;
 
   const analyzeRfp = async () => {
     if (!rfpText.trim()) {
       setError('Please enter RFP text to analyze');
+      return;
+    }
+
+    const completeness = getCompleteness();
+    if (completeness.overall < 30) {
+      setShowOnboardingPrompt(true);
       return;
     }
 
@@ -72,17 +121,21 @@ SUBMISSION DEADLINE: 30 days from publication`;
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ rfpText }),
+        body: JSON.stringify({ 
+          rfpText,
+          profile // Include the profile in the request
+        }),
       });
 
       if (!response.ok) {
-        throw new Error('Analysis failed');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Analysis failed');
       }
 
       const data = await response.json();
       setResult(data);
     } catch (err) {
-      setError('An error occurred during analysis. Please try again.');
+      setError(err instanceof Error ? err.message : 'An error occurred during analysis. Please try again.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -96,7 +149,7 @@ SUBMISSION DEADLINE: 30 days from publication`;
   };
 
   const generateProposal = async () => {
-    if (!result || result.decision !== 'GO') return;
+    if (!result || !result.decision.includes('GO')) return;
 
     setIsGeneratingProposal(true);
     setError('');
@@ -145,7 +198,6 @@ ${proposalData.whyChooseUs}`;
 
     try {
       await navigator.clipboard.writeText(proposalText);
-      // Show success feedback (you could add a toast here)
       alert('Proposal copied to clipboard!');
     } catch (err) {
       alert('Failed to copy proposal');
@@ -188,8 +240,35 @@ ${proposalData.whyChooseUs}`;
       {/* Header */}
       <header className="border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-8">
-          <h1 className="text-3xl font-semibold text-black">RFP Hunter AI</h1>
-          <p className="text-gray-500 mt-2">AI-Powered RFP Analysis</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-semibold text-black">RFP Hunter AI</h1>
+              <p className="text-gray-500 mt-2">AI-Powered RFP Analysis with Profile Matching</p>
+            </div>
+            
+            {/* Profile Completeness Indicator */}
+            {mounted && (
+              <div className="flex items-center gap-4">
+                <ProfileCompleteness size="sm" />
+                <button
+                  onClick={() => router.push('/profile')}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  {getCompleteness().overall < 50 ? 'Complete Profile' : 'Edit Profile'}
+                </button>
+              </div>
+            )}
+          </div>
+          
+          {/* Low completeness warning */}
+          {mounted && getCompleteness().overall < 50 && (
+            <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-sm text-yellow-800">
+                <span className="font-medium">Profile {Math.round(getCompleteness().overall)}% complete.</span>
+                {' '}Complete your profile to get accurate RFP matching and scoring.
+              </p>
+            </div>
+          )}
         </div>
       </header>
 
@@ -229,99 +308,18 @@ ${proposalData.whyChooseUs}`;
             </div>
 
             {error && (
-              <p className="text-gray-500 text-sm">{error}</p>
+              <p className="text-red-500 text-sm">{error}</p>
             )}
           </div>
 
           {/* Right Column - Results */}
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
             {result ? (
-              <div className="space-y-6">
-                {/* Decision Badge */}
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">Analysis Results</h2>
-                  <span
-                    className={`px-4 py-2 rounded-full text-white font-medium ${
-                      result.decision === 'GO' ? 'bg-[#10b981]' : 'bg-[#ef4444]'
-                    }`}
-                  >
-                    {result.decision}
-                  </span>
-                </div>
-
-                {/* Score */}
-                <div className="border-t border-gray-200 pt-6">
-                  <p className="text-gray-500 text-sm mb-1">Match Score</p>
-                  <p className="text-3xl font-semibold">{result.score}%</p>
-                </div>
-
-                {/* Requirements */}
-                <div className="border-t border-gray-200 pt-6">
-                  <h3 className="font-semibold mb-4">Requirements Analysis</h3>
-                  
-                  {result.requirements.met.length > 0 && (
-                    <div className="mb-4">
-                      <p className="text-sm font-medium text-gray-700 mb-2">Met Requirements</p>
-                      <ul className="space-y-2">
-                        {result.requirements.met.map((req, index) => (
-                          <li key={index} className="flex items-start">
-                            <span className="text-gray-400 mr-2">✓</span>
-                            <span className="text-gray-700">{req}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                {result.requirements.unmet.length > 0 && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-700 mb-2">Unmet Requirements</p>
-                    <ul className="space-y-2">
-                      {result.requirements.unmet.map((req, index) => (
-                          <li key={index} className="flex items-start">
-                            <span className="text-gray-400 mr-2">✗</span>
-                            <span className="text-gray-700">{req}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-
-                {/* Reasoning */}
-                <div className="border-t border-gray-200 pt-6">
-                  <h3 className="font-semibold mb-2">Analysis Summary</h3>
-                  <p className="text-gray-700 leading-relaxed">{result.reasoning}</p>
-                </div>
-
-                {/* Next Steps */}
-                {result.nextSteps && result.nextSteps.length > 0 && (
-                  <div className="border-t border-gray-200 pt-6">
-                    <h3 className="font-semibold mb-2">Next Steps</h3>
-                    <ul className="space-y-2">
-                      {result.nextSteps.map((step, index) => (
-                        <li key={index} className="flex items-start">
-                          <span className="text-gray-400 mr-2">•</span>
-                          <span className="text-gray-700">{step}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Generate Proposal Button */}
-                {result.decision === 'GO' && (
-                  <div className="border-t border-gray-200 pt-6">
-                    <button
-                      onClick={generateProposal}
-                      disabled={isGeneratingProposal}
-                      className="w-full bg-[#10b981] text-white py-3 px-6 rounded-lg font-medium hover:bg-[#0ea471] disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200"
-                    >
-                      {isGeneratingProposal ? 'Generating...' : 'Generate Proposal'}
-                    </button>
-                  </div>
-                )}
-              </div>
+              <AnalysisResult 
+                result={result} 
+                onGenerateProposal={generateProposal}
+                isGeneratingProposal={isGeneratingProposal}
+              />
             ) : (
               <div className="h-full flex items-center justify-center text-gray-400">
                 <p>Analysis results will appear here</p>
@@ -387,6 +385,38 @@ ${proposalData.whyChooseUs}`;
           </div>
         )}
       </main>
+
+      {/* Onboarding Prompt Modal */}
+      {showOnboardingPrompt && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4">
+            <h3 className="text-lg font-semibold mb-3">Complete Your Profile for Accurate Analysis</h3>
+            <p className="text-gray-600 mb-6">
+              To provide accurate RFP matching and scoring, we need information about your company's capabilities, 
+              insurance coverage, and certifications. This takes just 5 minutes and dramatically improves accuracy.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => router.push('/profile')}
+                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-700 transition-all duration-200"
+              >
+                Set Up Profile
+              </button>
+              <button
+                onClick={() => setShowOnboardingPrompt(false)}
+                className="px-4 py-2 bg-white border border-gray-200 rounded-lg font-medium hover:bg-gray-50 transition-all duration-200"
+              >
+                Skip for Now
+              </button>
+            </div>
+            {getCompleteness().overall < 30 && (
+              <p className="text-xs text-gray-500 mt-3">
+                Note: Analysis accuracy will be limited without a complete profile.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
