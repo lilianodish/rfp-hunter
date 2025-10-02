@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
+import OpenAI from 'openai';
 
 interface AnalysisResult {
   decision: 'GO' | 'NO-GO';
   score: number;
   requirements: {
     met: string[];
-    notMet: string[];
+    unmet: string[];
   };
   reasoning: string;
+  nextSteps: string[];
 }
+
+// Initialize OpenAI client if API key exists
+const apiKey = process.env.OPENAI_API_KEY;
+const openai = apiKey && apiKey !== 'your-key-here' ? new OpenAI({ apiKey }) : null;
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,11 +27,65 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Mock analysis logic
-    const analysis = analyzeRfp(rfpText);
+    let analysis: AnalysisResult;
+
+    if (openai) {
+      // Use OpenAI API
+      try {
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          temperature: 0.3,
+          messages: [
+            {
+              role: 'system',
+              content: `You are analyzing RFPs for a pressure washing company in Glendale, CA. 
+              Analyze the provided RFP and return a JSON response with the following structure:
+              {
+                "decision": "GO" or "NO-GO",
+                "score": number between 0-100,
+                "requirements": {
+                  "met": ["list of requirements the company meets"],
+                  "unmet": ["list of requirements the company doesn't meet"]
+                },
+                "reasoning": "brief explanation of the decision",
+                "nextSteps": ["array of recommended next actions"]
+              }
+              
+              Consider factors like budget size, timeline feasibility, certification requirements, 
+              location preferences, and scope alignment with pressure washing services.`
+            },
+            {
+              role: 'user',
+              content: rfpText
+            }
+          ],
+          response_format: { type: 'json_object' }
+        });
+
+        const content = completion.choices[0].message.content;
+        if (!content) {
+          throw new Error('No response from OpenAI');
+        }
+
+        analysis = JSON.parse(content);
+        
+        // Ensure the response has the correct structure
+        if (!analysis.decision || !analysis.score || !analysis.requirements || !analysis.reasoning || !analysis.nextSteps) {
+          throw new Error('Invalid response structure from OpenAI');
+        }
+      } catch (openaiError) {
+        console.error('OpenAI API error:', openaiError);
+        // Fall back to mock analysis
+        analysis = analyzeRfpMock(rfpText);
+      }
+    } else {
+      // Use mock analysis when no API key
+      analysis = analyzeRfpMock(rfpText);
+    }
 
     return NextResponse.json(analysis);
   } catch (error) {
+    console.error('Analysis error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -33,7 +93,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function analyzeRfp(rfpText: string): AnalysisResult {
+function analyzeRfpMock(rfpText: string): AnalysisResult {
   const text = rfpText.toLowerCase();
   
   // Define evaluation criteria
@@ -110,14 +170,18 @@ function analyzeRfp(rfpText: string): AnalysisResult {
   // Generate reasoning
   const reasoning = generateReasoning(decision, totalScore, metRequirements, notMetRequirements);
 
+  // Generate next steps
+  const nextSteps = generateNextSteps(decision, metRequirements, notMetRequirements);
+
   return {
     decision,
     score: Math.round(totalScore),
     requirements: {
       met: metRequirements,
-      notMet: notMetRequirements
+      unmet: notMetRequirements
     },
-    reasoning
+    reasoning,
+    nextSteps
   };
 }
 
@@ -148,5 +212,37 @@ function generateReasoning(
            `there are ${notMet.length} critical gaps that pose substantial risks. ` +
            `The combination of strict requirements and potential compliance challenges ` +
            `suggests this opportunity may not align with standard capabilities without significant investment.`;
+  }
+}
+
+function generateNextSteps(
+  decision: 'GO' | 'NO-GO',
+  met: string[],
+  unmet: string[]
+): string[] {
+  if (decision === 'GO') {
+    const steps = [
+      'Review RFP requirements in detail',
+      'Prepare a comprehensive proposal outline',
+      'Gather relevant past project examples and case studies'
+    ];
+    
+    if (unmet.length > 0) {
+      steps.push('Identify partners or subcontractors for gap areas');
+      steps.push('Develop mitigation strategies for unmet requirements');
+    }
+    
+    steps.push('Schedule internal proposal review meeting');
+    steps.push('Begin drafting executive summary');
+    
+    return steps;
+  } else {
+    return [
+      'Document reasons for no-bid decision',
+      'Archive RFP for future reference',
+      'Consider partnership opportunities if requirements change',
+      'Monitor for similar opportunities with better alignment',
+      'Share learnings with business development team'
+    ];
   }
 }
