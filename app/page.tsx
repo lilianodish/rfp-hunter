@@ -5,6 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useProfileStore } from '@/lib/stores/profileStore';
 import { ProfileCompleteness } from '@/components/profile/ProfileCompleteness';
 import { AnalysisResult } from '@/components/AnalysisResult';
+import { DemoMode } from '@/components/DemoMode';
+import { analyzeRFP } from '@/app/actions';
+// import { GapDetectionModal } from '@/components/profile/GapDetectionModal';
+import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 interface AnalysisResultData {
   decision: 'HIGH_CONFIDENCE_GO' | 'MEDIUM_CONFIDENCE_GO' | 'LOW_CONFIDENCE_GO' | 'NO_GO';
@@ -43,6 +49,8 @@ export default function Home() {
   const [isGeneratingProposal, setIsGeneratingProposal] = useState(false);
   const [showOnboardingPrompt, setShowOnboardingPrompt] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [showGapModal, setShowGapModal] = useState(false);
+  const [gapData, setGapData] = useState<any>(null);
 
   const profile = useProfileStore(state => state.profile);
   const getCompleteness = useProfileStore(state => state.getCompleteness);
@@ -134,6 +142,16 @@ SUBMISSION DEADLINE: 30 days from publication`;
 
       const data = await response.json();
       setResult(data);
+      
+      // Check if there are fillable gaps and show modal
+      if (data.fillableGaps && data.fillableGaps.length > 0) {
+        setGapData({
+          gaps: data.fillableGaps,
+          currentScore: data.score,
+          potentialScore: Math.min(data.score + (data.fillableGaps.length * 5), 100)
+        });
+        setShowGapModal(true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred during analysis. Please try again.');
     } finally {
@@ -198,11 +216,36 @@ ${proposalData.whyChooseUs}`;
 
     try {
       await navigator.clipboard.writeText(proposalText);
-      alert('Proposal copied to clipboard!');
+      toast.success('Proposal copied to clipboard!');
     } catch (err) {
-      alert('Failed to copy proposal');
+      toast.error('Failed to copy proposal');
     }
   };
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts([
+    {
+      key: 'k',
+      metaKey: true,
+      ctrlKey: true,
+      handler: () => {
+        const textarea = document.getElementById('rfp-input') as HTMLTextAreaElement;
+        textarea?.focus();
+      },
+      description: 'Focus RFP input',
+    },
+    {
+      key: 'Enter',
+      metaKey: true,
+      ctrlKey: true,
+      handler: () => {
+        if (rfpText.trim() && !isAnalyzing) {
+          analyzeRfp();
+        }
+      },
+      description: 'Analyze RFP',
+    },
+  ]);
 
   const downloadProposal = () => {
     if (!proposalData) return;
@@ -237,8 +280,17 @@ ${proposalData.whyChooseUs}`;
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Demo Mode Banner */}
+      <AnimatePresence>
+        {mounted && <DemoMode className="fixed top-0 left-0 right-0 z-40" />}
+      </AnimatePresence>
+      
       {/* Header */}
-      <header className="border-b border-gray-200">
+      <motion.header 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="border-b border-gray-200 mt-16"
+      >
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
             <div>
@@ -270,7 +322,7 @@ ${proposalData.whyChooseUs}`;
             </div>
           )}
         </div>
-      </header>
+      </motion.header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
@@ -329,8 +381,14 @@ ${proposalData.whyChooseUs}`;
         </div>
 
         {/* Proposal Section */}
-        {proposalData && (
-          <div className="mt-8 space-y-6">
+        <AnimatePresence>
+          {proposalData && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="mt-8 space-y-6"
+            >
             <div className="border-b border-gray-200 pb-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-semibold">Generated Proposal</h2>
@@ -382,9 +440,23 @@ ${proposalData.whyChooseUs}`;
                 <p className="text-gray-700 leading-relaxed whitespace-pre-line">{proposalData.whyChooseUs}</p>
               </div>
             </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
+
+      {/* Gap Detection Modal - TODO: Integrate properly */}
+      {/* {showGapModal && gapData && (
+        <GapDetectionModal
+          isOpen={showGapModal}
+          onClose={() => setShowGapModal(false)}
+          missingField={null}
+          onUpdate={async (section, field, value) => {
+            // Re-analyze after updating profile
+            await analyzeRfp();
+          }}
+        />
+      )} */}
 
       {/* Onboarding Prompt Modal */}
       {showOnboardingPrompt && (

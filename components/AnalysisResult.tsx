@@ -3,6 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { exportAnalysisAsText, downloadTextFile } from '@/lib/utils/export';
+import { useProfileStore } from '@/lib/stores/profileStore';
+import { Download } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface ScoreBreakdown {
   geographic: number;
@@ -36,6 +40,7 @@ export function AnalysisResult({ result, onGenerateProposal, isGeneratingProposa
   const [showMissingReqs, setShowMissingReqs] = useState(false);
   const [copiedAnalysis, setCopiedAnalysis] = useState(false);
   const router = useRouter();
+  const { profile } = useProfileStore();
 
   const getDecisionColor = (decision: string) => {
     if (decision.includes('HIGH')) return 'bg-green-500';
@@ -82,6 +87,24 @@ ${result.missingRequirements.length > 0 ? `Missing Requirements:\n${result.missi
     } catch (err) {
       console.error('Failed to copy analysis:', err);
     }
+  };
+
+  const handleExport = () => {
+    const exportData = {
+      rfpTitle: 'RFP Analysis',
+      analysisDate: new Date().toLocaleDateString(),
+      companyName: profile?.basics?.companyName || 'Unknown Company',
+      score: result.score,
+      decision: getDecisionText(result.decision) + ' ' + (result.decision.includes('GO') ? 'GO' : 'NO GO'),
+      breakdown: result.breakdown,
+      missingRequirements: result.missingRequirements,
+      analysis: result.analysis,
+    };
+    
+    const content = exportAnalysisAsText(exportData);
+    const filename = `rfp-analysis-${new Date().toISOString().split('T')[0]}.txt`;
+    downloadTextFile(content, filename);
+    toast.success('Analysis exported successfully!');
   };
 
   const handleImproveScore = () => {
@@ -278,6 +301,14 @@ ${result.missingRequirements.length > 0 ? `Missing Requirements:\n${result.missi
             Improve Score
           </button>
         )}
+        
+        <button
+          onClick={handleExport}
+          className="px-6 py-3 bg-white border border-gray-200 rounded-lg font-medium hover:bg-gray-50 transition-all duration-200 flex items-center gap-2"
+        >
+          <Download className="w-4 h-4" />
+          Export Analysis
+        </button>
       </div>
 
       {/* Proposal Section */}

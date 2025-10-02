@@ -50,12 +50,85 @@ const services = [
   { key: 'fenceCleaning', label: 'Fence Cleaning' },
 ];
 
+const sampleProfile = {
+  basics: {
+    companyName: "ProWash Solutions",
+    dbaName: "ProWash",
+    address: "1234 Main St",
+    city: "Glendale",
+    state: "CA",
+    zip: "91201",
+    yearEstablished: 2010,
+    entityType: "LLC" as const,
+    ein: "12-3456789",
+    employees: 10,
+    crews: 3,
+    serviceRadius: 40,
+  },
+  insurance: {
+    generalLiability: { amount: 2000000, carrier: "State Farm", expiry: "2025-12-31" },
+    workersComp: { hasIt: true, carrier: "State Fund", expiry: "2025-12-31" },
+    commercialAuto: { amount: 1000000, carrier: "Progressive" },
+    umbrella: { amount: 5000000 },
+    professional: { amount: 1000000 },
+  },
+  services: {
+    buildingExterior: true,
+    concrete: true,
+    parkingStructure: true,
+    graffiti: true,
+    emergency247: true,
+    oilStain: true,
+    gumRemoval: true,
+    driveThrough: true,
+    awnings: true,
+    dumpsterAreas: true,
+    sidewalks: true,
+    brickCleaning: true,
+  },
+  equipment: {
+    hotWater: { capable: true, maxTemp: 200, psi: 3500 },
+    coldWater: { capable: true, psi: 4000 },
+    numberOfTrucks: 5,
+    waterRecovery: true,
+    aerialLift: false,
+    surfaceCleaners: true,
+    chemicalSystem: true,
+    epaApprovedChemicals: true,
+  },
+  certifications: {
+    businessLicense: true,
+    contractorLicense: true,
+    epaCompliant: true,
+    oshaLevel: "10-hour" as const,
+    prevailingWage: false,
+    samRegistration: true,
+    cageCode: "12345",
+    dunsNumber: "123456789",
+    smallBusiness: true,
+    minorityOwned: false,
+    womanOwned: false,
+    veteranOwned: false,
+    hubZone: false,
+  },
+  operational: {
+    nightWork: true,
+    weekendWork: true,
+    holidayWork: false,
+    minimumContract: 500,
+    maxSimultaneousJobs: 10,
+    emergencyResponseTime: 2,
+    paymentTermsRequired: "Net 30" as const,
+  },
+};
+
 export default function OnboardingPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [showSkipWarning, setShowSkipWarning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showCompletion, setShowCompletion] = useState(false);
+  const isDevelopment = process.env.NODE_ENV === 'development';
   
   const {
     profile,
@@ -102,6 +175,15 @@ export default function OnboardingPage() {
     setShowSkipWarning(false);
   };
 
+  const fillWithSampleData = () => {
+    updateBasics(sampleProfile.basics);
+    updateInsurance(sampleProfile.insurance);
+    updateServices(sampleProfile.services);
+    updateEquipment(sampleProfile.equipment);
+    updateCertifications(sampleProfile.certifications);
+    updateOperational(sampleProfile.operational);
+  };
+
   if (showCompletion) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -127,13 +209,25 @@ export default function OnboardingPage() {
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
             <h1 className="text-2xl font-bold">Company Profile Setup</h1>
-            <Button
-              variant="outline"
-              onClick={() => setShowSkipWarning(true)}
-              className="text-sm"
-            >
-              Skip Setup
-            </Button>
+            <div className="flex gap-2">
+              {isDevelopment && (
+                <Button
+                  variant="outline"
+                  onClick={fillWithSampleData}
+                  className="text-sm"
+                >
+                  <Sparkles className="h-4 w-4 mr-1" />
+                  Fill Sample Data
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={() => setShowSkipWarning(true)}
+                className="text-sm"
+              >
+                Skip Setup
+              </Button>
+            </div>
           </div>
           
           {/* Step Progress */}
@@ -167,7 +261,10 @@ export default function OnboardingPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  {steps[currentStep - 1].icon && <steps[currentStep - 1].icon className="h-6 w-6" />}
+                  {(() => {
+                    const Icon = steps[currentStep - 1].icon;
+                    return Icon && <Icon className="h-6 w-6" />;
+                  })()}
                   {steps[currentStep - 1].title}
                 </CardTitle>
                 <CardDescription>{steps[currentStep - 1].description}</CardDescription>
@@ -391,10 +488,10 @@ export default function OnboardingPage() {
                             <Switch
                               id="wcHas"
                               checked={profile.insurance.workersComp?.hasIt || false}
-                              onCheckedChange={(checked) => updateInsurance({
+                              onChange={(e) => updateInsurance({
                                 workersComp: {
                                   ...profile.insurance.workersComp,
-                                  hasIt: checked
+                                  hasIt: e.target.checked
                                 }
                               })}
                             />
@@ -532,8 +629,8 @@ export default function OnboardingPage() {
                             <Checkbox
                               id={service.key}
                               checked={profile.services[service.key as keyof typeof profile.services] || false}
-                              onCheckedChange={(checked) => updateServices({
-                                [service.key]: checked
+                              onChange={(e) => updateServices({
+                                [service.key]: e.target.checked
                               })}
                             />
                             <Label
@@ -558,10 +655,10 @@ export default function OnboardingPage() {
                               <Switch
                                 id="hotWaterCapable"
                                 checked={profile.equipment.hotWater?.capable || false}
-                                onCheckedChange={(checked) => updateEquipment({
+                                onChange={(e) => updateEquipment({
                                   hotWater: {
                                     ...profile.equipment.hotWater,
-                                    capable: checked
+                                    capable: e.target.checked
                                   }
                                 })}
                               />
@@ -613,10 +710,10 @@ export default function OnboardingPage() {
                               <Switch
                                 id="coldWaterCapable"
                                 checked={profile.equipment.coldWater?.capable || false}
-                                onCheckedChange={(checked) => updateEquipment({
+                                onChange={(e) => updateEquipment({
                                   coldWater: {
                                     ...profile.equipment.coldWater,
-                                    capable: checked
+                                    capable: e.target.checked
                                   }
                                 })}
                               />
@@ -661,7 +758,7 @@ export default function OnboardingPage() {
                             <Switch
                               id="waterRecovery"
                               checked={profile.equipment.waterRecovery || false}
-                              onCheckedChange={(checked) => updateEquipment({ waterRecovery: checked })}
+                              onChange={(e) => updateEquipment({ waterRecovery: e.target.checked })}
                             />
                             <Label htmlFor="waterRecovery">Water recovery system</Label>
                           </div>
@@ -670,7 +767,7 @@ export default function OnboardingPage() {
                             <Switch
                               id="aerialLift"
                               checked={profile.equipment.aerialLift || false}
-                              onCheckedChange={(checked) => updateEquipment({ aerialLift: checked })}
+                              onChange={(e) => updateEquipment({ aerialLift: e.target.checked })}
                             />
                             <Label htmlFor="aerialLift">Aerial lift equipment</Label>
                           </div>
@@ -679,7 +776,7 @@ export default function OnboardingPage() {
                             <Switch
                               id="surfaceCleaners"
                               checked={profile.equipment.surfaceCleaners || false}
-                              onCheckedChange={(checked) => updateEquipment({ surfaceCleaners: checked })}
+                              onChange={(e) => updateEquipment({ surfaceCleaners: e.target.checked })}
                             />
                             <Label htmlFor="surfaceCleaners">Surface cleaners</Label>
                           </div>
@@ -688,7 +785,7 @@ export default function OnboardingPage() {
                             <Switch
                               id="chemicalSystem"
                               checked={profile.equipment.chemicalSystem || false}
-                              onCheckedChange={(checked) => updateEquipment({ chemicalSystem: checked })}
+                              onChange={(e) => updateEquipment({ chemicalSystem: e.target.checked })}
                             />
                             <Label htmlFor="chemicalSystem">Chemical injection system</Label>
                           </div>
@@ -697,7 +794,7 @@ export default function OnboardingPage() {
                             <Switch
                               id="epaApprovedChemicals"
                               checked={profile.equipment.epaApprovedChemicals || false}
-                              onCheckedChange={(checked) => updateEquipment({ epaApprovedChemicals: checked })}
+                              onChange={(e) => updateEquipment({ epaApprovedChemicals: e.target.checked })}
                             />
                             <Label htmlFor="epaApprovedChemicals">EPA approved chemicals only</Label>
                           </div>
@@ -719,7 +816,7 @@ export default function OnboardingPage() {
                           <Switch
                             id="businessLicense"
                             checked={profile.certifications.businessLicense || false}
-                            onCheckedChange={(checked) => updateCertifications({ businessLicense: checked })}
+                            onChange={(e) => updateCertifications({ businessLicense: e.target.checked })}
                           />
                         </div>
                         
@@ -728,7 +825,7 @@ export default function OnboardingPage() {
                           <Switch
                             id="contractorLicense"
                             checked={profile.certifications.contractorLicense || false}
-                            onCheckedChange={(checked) => updateCertifications({ contractorLicense: checked })}
+                            onChange={(e) => updateCertifications({ contractorLicense: e.target.checked })}
                           />
                         </div>
                         
@@ -737,7 +834,7 @@ export default function OnboardingPage() {
                           <Switch
                             id="epaCompliant"
                             checked={profile.certifications.epaCompliant || false}
-                            onCheckedChange={(checked) => updateCertifications({ epaCompliant: checked })}
+                            onChange={(e) => updateCertifications({ epaCompliant: e.target.checked })}
                           />
                         </div>
                         
@@ -763,7 +860,7 @@ export default function OnboardingPage() {
                           <Switch
                             id="prevailingWage"
                             checked={profile.certifications.prevailingWage || false}
-                            onCheckedChange={(checked) => updateCertifications({ prevailingWage: checked })}
+                            onChange={(e) => updateCertifications({ prevailingWage: e.target.checked })}
                           />
                         </div>
                       </div>
@@ -776,7 +873,7 @@ export default function OnboardingPage() {
                           <Switch
                             id="samRegistration"
                             checked={profile.certifications.samRegistration || false}
-                            onCheckedChange={(checked) => updateCertifications({ samRegistration: checked })}
+                            onChange={(e) => updateCertifications({ samRegistration: e.target.checked })}
                           />
                         </div>
                         
@@ -810,7 +907,7 @@ export default function OnboardingPage() {
                           <Switch
                             id="smallBusiness"
                             checked={profile.certifications.smallBusiness || false}
-                            onCheckedChange={(checked) => updateCertifications({ smallBusiness: checked })}
+                            onChange={(e) => updateCertifications({ smallBusiness: e.target.checked })}
                           />
                         </div>
                         
@@ -819,7 +916,7 @@ export default function OnboardingPage() {
                           <Switch
                             id="minorityOwned"
                             checked={profile.certifications.minorityOwned || false}
-                            onCheckedChange={(checked) => updateCertifications({ minorityOwned: checked })}
+                            onChange={(e) => updateCertifications({ minorityOwned: e.target.checked })}
                           />
                         </div>
                         
@@ -828,7 +925,7 @@ export default function OnboardingPage() {
                           <Switch
                             id="womanOwned"
                             checked={profile.certifications.womanOwned || false}
-                            onCheckedChange={(checked) => updateCertifications({ womanOwned: checked })}
+                            onChange={(e) => updateCertifications({ womanOwned: e.target.checked })}
                           />
                         </div>
                         
@@ -837,7 +934,7 @@ export default function OnboardingPage() {
                           <Switch
                             id="veteranOwned"
                             checked={profile.certifications.veteranOwned || false}
-                            onCheckedChange={(checked) => updateCertifications({ veteranOwned: checked })}
+                            onChange={(e) => updateCertifications({ veteranOwned: e.target.checked })}
                           />
                         </div>
                         
@@ -846,7 +943,7 @@ export default function OnboardingPage() {
                           <Switch
                             id="hubZone"
                             checked={profile.certifications.hubZone || false}
-                            onCheckedChange={(checked) => updateCertifications({ hubZone: checked })}
+                            onChange={(e) => updateCertifications({ hubZone: e.target.checked })}
                           />
                         </div>
                       </div>
@@ -868,7 +965,7 @@ export default function OnboardingPage() {
                           <Switch
                             id="nightWork"
                             checked={profile.operational.nightWork || false}
-                            onCheckedChange={(checked) => updateOperational({ nightWork: checked })}
+                            onChange={(e) => updateOperational({ nightWork: e.target.checked })}
                           />
                         </div>
                         
@@ -880,7 +977,7 @@ export default function OnboardingPage() {
                           <Switch
                             id="weekendWork"
                             checked={profile.operational.weekendWork || false}
-                            onCheckedChange={(checked) => updateOperational({ weekendWork: checked })}
+                            onChange={(e) => updateOperational({ weekendWork: e.target.checked })}
                           />
                         </div>
                         
@@ -892,7 +989,7 @@ export default function OnboardingPage() {
                           <Switch
                             id="holidayWork"
                             checked={profile.operational.holidayWork || false}
-                            onCheckedChange={(checked) => updateOperational({ holidayWork: checked })}
+                            onChange={(e) => updateOperational({ holidayWork: e.target.checked })}
                           />
                         </div>
                       </div>

@@ -457,7 +457,7 @@ export async function POST(request: NextRequest) {
     
     if (!companyProfile) {
       // Try to read from cookies (if stored there)
-      const cookieStore = cookies();
+      const cookieStore = await cookies();
       const profileCookie = cookieStore.get('company-profile');
       if (profileCookie) {
         try {
