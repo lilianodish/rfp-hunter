@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { FileText, User, TestTube, Home } from "lucide-react";
+import { FileText, User, TestTube, Home, FlaskConical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ToastProvider } from "@/components/ToastProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -58,12 +58,20 @@ export default function RootLayout({
                   </Button>
                 </Link>
                 {isDevelopment && (
-                  <Link href="/test">
-                    <Button variant="ghost" size="sm" className="gap-2">
-                      <TestTube className="w-4 h-4" />
-                      Test RFPs
-                    </Button>
-                  </Link>
+                  <>
+                    <Link href="/test">
+                      <Button variant="ghost" size="sm" className="gap-2">
+                        <TestTube className="w-4 h-4" />
+                        Test RFPs
+                      </Button>
+                    </Link>
+                    <Link href="/test-harness">
+                      <Button variant="ghost" size="sm" className="gap-2">
+                        <FlaskConical className="w-4 h-4" />
+                        Test Harness
+                      </Button>
+                    </Link>
+                  </>
                 )}
               </div>
             </div>

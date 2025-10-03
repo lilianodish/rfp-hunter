@@ -1,6 +1,44 @@
 /**
  * Utility for calculating distances between locations
+ * Uses known distances from Glendale, CA for California cities
  */
+
+// Known distances from Glendale, CA (in miles)
+const CALIFORNIA_DISTANCES: Record<string, number> = {
+  'glendale': 0,
+  'burbank': 7,
+  'north hollywood': 8,
+  'pasadena': 10,
+  'eagle rock': 10,
+  'los angeles': 13,
+  'downtown la': 13,
+  'dtla': 13,
+  'monterey park': 15, // THIS WAS THE BUG - wasn't in the list!
+  'alhambra': 15,
+  'hollywood': 15,
+  'beverly hills': 18,
+  'culver city': 20,
+  'inglewood': 22,
+  'santa monica': 25,
+  'torrance': 28,
+  'long beach': 30,
+  'whittier': 30,
+  'manhattan beach': 32,
+  'lakewood': 35,
+  'anaheim': 40,
+  'orange': 42,
+  'irvine': 45,
+  'riverside': 55,
+  'san bernardino': 65,
+  'ventura': 70,
+  'santa barbara': 95,
+  'san diego': 130,
+  'fresno': 220,
+  'san francisco': 350,
+  'san bruno': 350,
+  'sacramento': 360,
+  'san jose': 340
+};
 
 interface Coordinates {
   lat: number;
@@ -23,6 +61,8 @@ const ZIP_COORDINATES: Record<string, Coordinates> = {
   '90210': { lat: 34.0901, lng: -118.4065 }, // Beverly Hills
   '91101': { lat: 34.1478, lng: -118.1445 }, // Pasadena
   '91801': { lat: 34.1064, lng: -118.1280 }, // Alhambra
+  '91754': { lat: 34.0522, lng: -118.1174 }, // Monterey Park
+  '91755': { lat: 34.0475, lng: -118.1226 }, // Monterey Park
   '91001': { lat: 34.0966, lng: -118.0356 }, // Altadena
   '90245': { lat: 33.9425, lng: -118.3956 }, // El Segundo
   '90266': { lat: 33.8894, lng: -118.3966 }, // Manhattan Beach
@@ -38,9 +78,60 @@ const ZIP_COORDINATES: Record<string, Coordinates> = {
   '90501': { lat: 33.8358, lng: -118.3406 }, // Torrance
   '90601': { lat: 33.9464, lng: -118.0838 }, // Whittier
   '90650': { lat: 33.9802, lng: -118.0647 }, // Norwalk
+  '90802': { lat: 33.7701, lng: -118.1937 }, // Long Beach
+  '92805': { lat: 33.8353, lng: -117.9145 }, // Anaheim
+  '92501': { lat: 33.9533, lng: -117.3962 }, // Riverside
   
   // Add more ZIP codes as needed
 };
+
+/**
+ * Get distance from Glendale to a California location
+ * @param location Location string (city name, address, etc.)
+ * @returns Distance in miles from Glendale, CA
+ */
+export function getDistanceFromGlendale(location: string): number {
+  if (!location) return 999; // Unknown location = far away
+  
+  const cleanLocation = location.toLowerCase().trim();
+  
+  // Check for exact city match first
+  for (const [city, distance] of Object.entries(CALIFORNIA_DISTANCES)) {
+    if (cleanLocation.includes(city)) {
+      return distance;
+    }
+  }
+  
+  // Check for zip codes (rough estimates)
+  if (cleanLocation.includes('9120')) return 0; // Glendale zips
+  if (cleanLocation.includes('9150')) return 7; // Burbank
+  if (cleanLocation.includes('9110')) return 10; // Pasadena
+  if (cleanLocation.includes('9175')) return 15; // Monterey Park zips
+  if (cleanLocation.includes('900')) return 13; // Downtown LA
+  if (cleanLocation.includes('90802')) return 30; // Long Beach
+  if (cleanLocation.includes('92805')) return 40; // Anaheim
+  if (cleanLocation.includes('92501')) return 55; // Riverside
+  
+  // Default to out of range if not found
+  console.warn(`Unknown location: ${location}, defaulting to out of range`);
+  return 999;
+}
+
+/**
+ * Calculate geographic score based on distance and service radius
+ * @param distance Distance in miles
+ * @param serviceRadius Service radius in miles
+ * @returns Score from 0-100
+ */
+export function calculateGeographicScore(distance: number, serviceRadius: number): number {
+  if (distance <= serviceRadius) {
+    return 100; // Within service radius = 100%
+  } else if (distance <= serviceRadius * 1.5) {
+    return 50; // Slightly outside but possible = 50%
+  } else {
+    return 0; // Too far = 0%
+  }
+}
 
 /**
  * Calculate the distance between two points using the Haversine formula
@@ -150,6 +241,13 @@ export function isWithinServiceRadius(
   companyLocation: string,
   serviceRadius: number
 ): boolean {
+  // First try to use the Glendale distance lookup
+  if (companyLocation.toLowerCase().includes('glendale')) {
+    const distance = getDistanceFromGlendale(rfpLocation);
+    return distance <= serviceRadius;
+  }
+  
+  // Otherwise fall back to ZIP code distance calculation
   const distance = calculateDistance(rfpLocation, companyLocation);
   if (distance === null) {
     // If we can't calculate distance, be conservative and return false
