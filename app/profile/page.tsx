@@ -95,6 +95,13 @@ export default function ProfilePage() {
     const file = event.target.files?.[0];
     if (!file) return;
     
+    // Check file type
+    if (!file.name.endsWith('.json')) {
+      alert('Please select a JSON file. PDF import is not supported.');
+      event.target.value = ''; // Reset the input
+      return;
+    }
+    
     setIsImporting(true);
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -109,12 +116,21 @@ export default function ProfilePage() {
         if (importedProfile.operational) updateOperational(importedProfile.operational);
         
         setIsImporting(false);
+        alert('Profile imported successfully!');
       } catch (error) {
         console.error('Failed to import profile:', error);
+        alert('Invalid file format. Please select a valid JSON profile export.');
         setIsImporting(false);
       }
     };
+    reader.onerror = () => {
+      alert('Error reading file. Please try again.');
+      setIsImporting(false);
+    };
     reader.readAsText(file);
+    
+    // Reset the input value to allow re-importing the same file
+    event.target.value = '';
   };
 
   const handleDelete = () => {

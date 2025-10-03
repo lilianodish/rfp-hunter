@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { cookies } from 'next/headers';
 import { CompanyProfile } from '@/lib/types/profile';
-import { calculateDistance, isWithinServiceRadius } from '@/lib/utils/distance';
+import { calculateDistance, isWithinServiceRadius, getDistanceFromGlendale, calculateGeographicScore } from '@/lib/utils/distance';
 import {
   calculateInsuranceMatch,
   calculateServicesMatch,
@@ -145,7 +145,11 @@ function extractRequirementsFallback(rfpText: string): ExtractedRequirements {
   if (zipMatch) location.zip = zipMatch[0].substring(0, 5);
   
   // Common city names in LA area
-  const cities = ['los angeles', 'glendale', 'pasadena', 'burbank', 'santa monica', 'beverly hills'];
+  const cities = [
+    'los angeles', 'glendale', 'pasadena', 'burbank', 'santa monica', 
+    'beverly hills', 'monterey park', 'alhambra', 'long beach', 'torrance',
+    'inglewood', 'downtown la', 'dtla', 'anaheim', 'riverside'
+  ];
   for (const city of cities) {
     if (text.includes(city)) {
       location.city = city.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -270,16 +274,28 @@ function calculateMatch(
       ? companyProfile.basics.zip
       : `${companyProfile.basics.city}, ${companyProfile.basics.state}`;
     
-    if (companyProfile.basics.serviceRadius) {
-      const distance = calculateDistance(rfpLocation, companyLocation);
-      if (distance !== null) {
-        geoScore = distance <= companyProfile.basics.serviceRadius ? 100 : 0;
-        if (geoScore === 0) {
-          missingRequirements.push(`Location outside service radius (${distance.toFixed(1)} miles, max: ${companyProfile.basics.serviceRadius} miles)`);
+    // Check if company is in Glendale (use specialized distance calculation)
+    if (companyProfile.basics.city?.toLowerCase().includes('glendale')) {
+      const distance = getDistanceFromGlendale(rfpLocation);
+      const serviceRadius = companyProfile.operational?.serviceRadius || companyProfile.basics.serviceRadius || 40;
+      geoScore = calculateGeographicScore(distance, serviceRadius);
+      
+      if (geoScore === 0) {
+        missingRequirements.push(`Location outside service radius (${distance} miles, max: ${serviceRadius} miles)`);
+      }
+    } else {
+      // Fall back to regular distance calculation
+      if (companyProfile.basics.serviceRadius) {
+        const distance = calculateDistance(rfpLocation, companyLocation);
+        if (distance !== null) {
+          geoScore = distance <= companyProfile.basics.serviceRadius ? 100 : 0;
+          if (geoScore === 0) {
+            missingRequirements.push(`Location outside service radius (${distance.toFixed(1)} miles, max: ${companyProfile.basics.serviceRadius} miles)`);
+          }
+        } else {
+          // Can't calculate distance, be conservative
+          geoScore = 50;
         }
-      } else {
-        // Can't calculate distance, be conservative
-        geoScore = 50;
       }
     }
   }
